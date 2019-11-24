@@ -1,0 +1,83 @@
+"0","library(radiant)
+"
+"2","Loading required package: radiant.data
+"
+"2","Loading required package: magrittr
+"
+"2","
+Attaching package: ‘magrittr’
+
+"
+"2","The following object is masked from ‘package:purrr’:
+
+    set_names
+
+"
+"2","The following object is masked from ‘package:tidyr’:
+
+    extract
+
+"
+"2","Loading required package: lubridate
+"
+"2","
+Attaching package: ‘lubridate’
+
+"
+"2","The following object is masked from ‘package:base’:
+
+    date
+
+"
+"2","Registered S3 methods overwritten by 'htmltools':
+  method               from         
+  print.html           tools:rstudio
+  print.shiny.tag      tools:rstudio
+  print.shiny.tag.list tools:rstudio
+"
+"2","Registered S3 method overwritten by 'data.table':
+  method           from
+  print.data.table     
+"
+"2","Registered S3 method overwritten by 'htmlwidgets':
+  method           from         
+  print.htmlwidget tools:rstudio
+"
+"2","Registered S3 method overwritten by 'radiant.data':
+  method       from  
+  print.gtable gtable
+"
+"2","
+Attaching package: ‘radiant.data’
+
+"
+"2","The following objects are masked from ‘package:lubridate’:
+
+    month, wday
+
+"
+"2","The following object is masked from ‘package:forcats’:
+
+    as_factor
+
+"
+"2","The following objects are masked from ‘package:purrr’:
+
+    is_double, is_empty, is_numeric
+
+"
+"2","The following object is masked from ‘package:ggplot2’:
+
+    diamonds
+
+"
+"2","Loading required package: radiant.design
+"
+"2","Loading required package: mvtnorm
+"
+"2","Loading required package: radiant.basics
+"
+"2","Loading required package: radiant.model
+"
+"2","Loading required package: radiant.multivariate
+"

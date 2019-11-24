@@ -1,0 +1,72 @@
+---
+title: "lending club"
+author: "aki"
+date: "11/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(glmnet)
+library(radiant)
+```
+
+```{r}
+data <- read_csv('~/loan.csv')
+totalkeep=c("application_type","acc_now_delinq","chargeoff_within_12_mths","delinq_amnt","loan_amnt","funded_amnt","term","int_rate","grade","sub_grade","emp_length","home_ownership","annual_inc","verification_status","issue_d","loan_status","purpose","addr_state","delinq_2yrs","total_acc","pct_tl_nvr_dlq")
+newdatloan= data%>% select(totalkeep)
+
+cleandatloan <- newdatloan %>%
+mutate(home_status= ifelse(home_ownership %in% c("ANY","NONE","OTHER"),"Unknown",home_ownership)) 
+  
+cleandatloan$loan_status[cleandatloan$loan_status=="Does not meet the credit policy. Status:Fully Paid"]="Fully Paid"
+
+cleandatloan <- cleandatloan %>%  filter(loan_status!="Current") %>% mutate(label= ifelse(loan_status=="Fully Paid",1,0),      pastdelinq=ifelse(delinq_2yrs==0,0,ifelse(delinq_2yrs==1,1,2)),
+                                         nowdelinq=ifelse(acc_now_delinq==0,0,1),
+                                         chargedoffrecord=ifelse(chargeoff_within_12_mths==0,0,1))
+
+loanData <- readRDS("newloanData.rds")
+
+set.seed(123)
+totaldataset=sample(loanData)
+trainsize=nrow(loanData)*0.75
+
+traindataset=totaldataset[1:trainsize,]
+validataset=totaldataset[trainsize:nrow(loanData),]
+
+model1=glm(label~purpose+application_type+loan_amnt_itv+nev_delinq_itv+verification_status+chargedoffrecord+pastdelinq+nowdelinq+total_acc_log+sub_grade+term,data=traindataset,family=binomial(link="logit"))
+
+traindataset$pred=predict(model1, 
+                        newdata =traindataset , 
+                        type = "response")
+
+traindataset=saveRDS(traindataset,"traindataset.rds")
+traindataset=readRDS("traindataset.rds")
+
+traindataset=traindataset%>%
+  mutate(predresult=ifelse(pred>0.5,1,0))
+
+accuracy=sum(traindataset$predresult==traindataset$label)/nrow(traindataset)
+accuracy 
+sum(traindataset$label)/nrow(traindataset)
+
+#model 2
+model2=glm(label~purpose+application_type+loan_amnt_itv+nev_delinq_itv+verification_status+chargedoffrecord+pastdelinq+nowdelinq+total_acc_log+sub_grade+term+addr_state+emp_length+home_status*emp_length,data=traindataset,family=binomial(link="logit"))
+
+traindataset$predmodel2=predict(model2, 
+                        newdata =traindataset , 
+                        type = "response")
+
+traindataset=traindataset%>%
+  mutate(predresult2=ifelse(predmodel2>0.5,1,0))
+
+accuracy=sum(traindataset$predresult2==traindataset$label)/nrow(traindataset)
+accuracy 
+
+#model3
+
+
+## glm(formula = lsurv ~ pclass + sex + age.f, family = binomial(link = "logit"), 
+##     data = train),data=traindataset
+```
