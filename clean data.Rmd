@@ -1,0 +1,209 @@
+---
+title: "MGTA452 Group Project"
+author: "Shiyi Hua"
+date: "11/23/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+loan <- read_csv("~/loan.csv")
+```
+
+
+*Get relevant features and label*
+```{r}
+newdatLoan <- loan %>%
+  select(loan_amnt, funded_amnt, term, int_rate, grade, sub_grade, emp_length, home_ownership, annual_inc, verification_status, issue_d, loan_status, purpose, addr_state, delinq_2yrs, total_acc, application_type, acc_now_delinq, chargeoff_within_12_mths, delinq_amnt, pct_tl_nvr_dlq)
+```
+
+*Clean data*
+```{r}
+cleandatLoan <- newdatLoan %>%
+  filter(!emp_length == 'n/a') %>%
+  filter(!annual_inc == 'NA') %>%
+  filter(!total_acc == 'NA') %>%
+  filter(!chargeoff_within_12_mths == 'NA') %>%
+  filter(!pct_tl_nvr_dlq == 'NA') %>%
+  mutate(annual_inc_itv = cut(annual_inc, breaks = c(-1, 10000, 30000, 50000, 100000, 300000, 600000, 120000000))) %>%
+  mutate(month = substr(issue_d, 1, 3), year = substr(issue_d, 5, 8)) %>%
+  mutate(total_acc_log = log(total_acc)) %>%
+  mutate(nev_delinq_itv = cut(pct_tl_nvr_dlq, breaks = c(-1, 95, 100))) %>%
+  mutate(home_status = ifelse(home_ownership %in% c("ANY", "NONE", "OTHER"), "Unknown", home_ownership))
+  
+cleandatLoan$loan_status[cleandatLoan$loan_status == "Does not meet the credit policy. Status:Fully Paid"] = "Fully Paid"
+
+cleandatLoan <- cleandatLoan %>%
+  filter(!loan_status == 'Current') %>%
+  mutate(label = ifelse(loan_status == "Fully Paid", 0, 1), pastdelinq = ifelse(delinq_2yrs == 0, 0, ifelse(delinq_2yrs == 1, 1, 2)), nowdelinq = ifelse(acc_now_delinq == 0, 0, 1), chargedoffrecord = ifelse(chargeoff_within_12_mths == 0, 0, 1))
+```
+
+*Select data*
+```{r}
+seldatLoan <- cleandatLoan %>%
+  mutate(term_num = as.numeric(substr(term, 1, 2)),employyear= substr(emp_length,1,2)) %>%
+  mutate(employlen=as.numeric(ifelse(employyear=="< ",1,employyear))) %>%
+  select(label, loan_amnt, funded_amnt, term_num, int_rate, grade, sub_grade, emp_length,employlen, home_status, annual_inc_itv, verification_status, month, year, purpose, addr_state,pct_tl_nvr_dlq,home_ownership, pastdelinq,delinq_2yrs,total_acc, total_acc_log, application_type, acc_now_delinq,nowdelinq, chargeoff_within_12_mths,chargedoffrecord,delinq_amnt, nev_delinq_itv,annual_inc)
+```
+
+*Save data*
+```{r}
+saveRDS(seldatLoan, file = "loanData.rds")
+```
+
+
+```{r}
+loanData <- readRDS("loanData.rds")
+```
+
+```{r}
+newloanData <- seldatLoan %>%
+  mutate(loan_amnt_itv = cut(loan_amnt, breaks = c(999, 6000, 11000, 16000, 21000, 26000, 31000, 36000, 40000))) %>%
+  mutate(debt_ratio=loan_amnt/term_num/(annual_inc/12)) %>%
+  select(label, loan_amnt, funded_amnt, term_num, int_rate, grade, sub_grade, emp_length,employlen, home_status, annual_inc_itv, verification_status, month, year, purpose, addr_state,pct_tl_nvr_dlq,home_ownership, pastdelinq,delinq_2yrs,total_acc, total_acc_log, application_type, acc_now_delinq,nowdelinq, chargeoff_within_12_mths,chargedoffrecord,delinq_amnt, nev_delinq_itv,annual_inc, debt_ratio,loan_amnt_itv)
+
+write.csv(newloanData,"newloanData.csv")
+```
+
+```{r}
+saveRDS(newloanData, file = "newloanData2.rds")
+```
+
+```{r}
+# Read data
+newloanData <- readRDS("newloanData2.rds")
+```
+
+```{r}
+# Split the whole dataset into training (75%) and validation (25%) sets
+smp_size <- floor(0.75 * nrow(newloanData))
+set.seed(123)
+train_ind <- sample(seq_len(nrow(newloanData)), size = smp_size)
+training <- newloanData[train_ind, ]
+validation <- newloanData[-train_ind, ]
+```
+
+*Train model A*
+```{r}
+# Train the logistic regression model on the training set
+logitLoanA <- glm(label ~ loan_amnt_itv + term + sub_grade + emp_length + home_status + annual_inc_itv + verification_status + purpose + pastdelinq + total_acc_log + application_type + nowdelinq + chargedoffrecord + nev_delinq_itv + addr_state, data = training, family = binomial(link = "logit"))
+```
+
+```{r}
+# Look at the results of logistic regression model on the training set
+summary(logitLoanA)
+```
+
+```{r}
+# Use the above logistic regression model to predict the training set
+training$ProbA <- predict(logitLoanA, newdata = training, type = "response")
+```
+
+```{r}
+# Set different thresholds to see which one gives the highest accuracy on the training set
+thre_tr <- seq(0, 1, 0.05)
+accuracy_tr <- vector()
+for (i in thre_tr) {
+  training$pred_label <- ifelse(training$ProbA > i, 1, 0)
+  count <- 0
+  for (j in 1:nrow(training)) {
+    if (training$pred_label[j] == training$label[j]) {
+      count <- count + 1
+    }
+  }
+  acc_tr <- count / nrow(training)
+  accuracy_tr <- c(accuracy_tr, acc_tr)
+}
+```
+
+```{r}
+# Create a dataframe to store different thresholds with corresponding accuracy
+tr_thre_acc <- data.frame(thre_tr, accuracy_tr)
+names(tr_thre_acc) <- c("threshold", "accuracy")
+```
+
+```{r}
+# See the highest accuracy with its threshold
+opt_thre_tr <- tr_thre_acc$threshold[which(tr_thre_acc$accuracy == max(tr_thre_acc$accuracy))]
+print(paste0("The optimal threshold of probability: ", opt_thre_tr, ". Max accuracy: ", max(tr_thre_acc$accuracy)))
+```
+
+*Tune model A*
+```{r}
+# Use the logistic regression model derived from the training set to predict the validation set
+validation$ProbA <- predict(logitLoanA, newdata = validation, type = "response")
+```
+
+```{r}
+# Set different thresholds for probability (ProbA) to see which one gives the highest accuracy on the validation set
+thre_range <- seq(0, 1, 0.05)
+accuracy <- vector()
+for (i in thre_range) {
+  validation$pred_label <- ifelse(validation$ProbA > i, 1, 0)
+  count <- 0
+  for (j in 1:nrow(validation)) {
+    if (validation$pred_label[j] == validation$label[j]) {
+      count <- count + 1
+    }
+  }
+  acc <- count / nrow(validation)
+  accuracy <- c(accuracy, acc)
+}
+```
+
+```{r}
+# Create a dataframe to store different thresholds with corresponding accuracy
+df_thre_acc <- data.frame(thre_range, accuracy)
+names(df_thre_acc) <- c("threshold", "accuracy")
+```
+
+```{r}
+# See the highest accuracy with its threshold
+opt_thre <- df_thre_acc$threshold[which(df_thre_acc$accuracy == max(df_thre_acc$accuracy))]
+print(paste0("The optimal threshold of probability: ", opt_thre, ". Max accuracy: ", max(df_thre_acc$accuracy)))
+```
+
+*Compare interest profit*
+```{r}
+# On the training set
+# With threshold = 0.5, calculate the predicted interest profit
+dat_pred_prof <- training %>%
+  mutate(predicted_label = ifelse(training$ProbA > 0.5, 1, 0)) %>%
+  mutate(model_prof = ifelse(predicted_label == 1 & label == 1, 0, ifelse(predicted_label == 1 & label == 0, 0, ifelse(predicted_label == 0 & label == 1, -(funded_amnt + funded_amnt * (int_rate / 100) * (as.numeric(substr(term, 1, 2)) / 12)), funded_amnt * (int_rate / 100) * (as.numeric(substr(term, 1, 2)) / 12)))))
+```
+
+```{r}
+# Training set
+sum_model_prof <- sum(dat_pred_prof$model_prof)
+sum_real_prof <- sum(dat_pred_prof$profit)
+```
+
+*Train model B*
+```{r}
+logitLoanB <- glm(label ~ loan_amnt_itv + term + sub_grade + emp_length + home_status + annual_inc_itv + verification_status + purpose + pastdelinq + total_acc_log + application_type + nowdelinq + chargedoffrecord + nev_delinq_itv + addr_state + home_status * emp_length, data = training, family = binomial(link = "logit"))
+```
+
+```{r}
+summary(logitLoanB)
+```
+
+```{r}
+training$ProbB <- predict(logitLoanB, newdata = training, type = "response")
+```
+
+```{r}
+training$pred_labelB <- ifelse(training$ProbB > 0.5, 1, 0)
+
+count <- 0
+for (j in 1:nrow(training)) {
+  if (training$pred_labelB[j] == training$label[j]) {
+    count <- count + 1
+  }
+}
+count / nrow(training)
+```
+
