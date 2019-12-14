@@ -26,33 +26,60 @@ cleandatloan <- cleandatloan %>%  filter(loan_status!="Current") %>% mutate(labe
                                          nowdelinq=ifelse(acc_now_delinq==0,0,1),
                                          chargedoffrecord=ifelse(chargeoff_within_12_mths==0,0,1))
 
-loanData <- readRDS("newloanData.rds")
-
+loanData <- readRDS("newloanData2.rds")
 set.seed(123)
 totaldataset=sample(loanData)
-trainsize=nrow(loanData)*0.75
+loanDatatrue=totaldataset %>% filter(label==1)
+loanDatafalse=totaldataset%>% filter(label==0)
 
-traindataset=totaldataset[1:trainsize,]
-validataset=totaldataset[trainsize:nrow(loanData),]
+train1=floor(0.5*nrow(loanDatatrue))
+train2=floor(0.5*nrow(loanDatafalse))
 
-model1=glm(label~purpose+application_type+loan_amnt_itv+nev_delinq_itv+verification_status+chargedoffrecord+pastdelinq+nowdelinq+total_acc_log+sub_grade+term,data=traindataset,family=binomial(link="logit"))
+vali1=floor(0.25*nrow(loanDatatrue))
+vali2=floor(0.25*nrow(loanDatafalse))+1
+
+test1=floor(0.25*nrow(loanDatatrue))+1
+test2=floor(0.25*nrow(loanDatafalse))+1
+
+
+traindataset=rbind(loanDatatrue[1:train1,],loanDatafalse[1:train2,])
+
+validataset=rbind(loanDatatrue[(train1+1):(train1+vali1),],loanDatafalse[(train2+1):(train2+vali2),])
+
+testdataset=rbind(loanDatatrue[(train1+vali1+1):nrow(loanDatatrue)
+,],loanDatafalse[(train2+vali2+1):nrow(loanDatafalse),])
+
+```
+
+
+```{r}
+model1=glm(label~purpose+term_num+application_type+nev_delinq_itv+verification_status+chargedoffrecord+home_status+pastdelinq+nowdelinq+total_acc_log+sub_grade+emp_length+home_status*emp_length,data=traindataset,family=binomial(link="logit"))
 
 traindataset$pred=predict(model1, 
                         newdata =traindataset , 
                         type = "response")
+
+validataset$pred=predict(model1, 
+                        newdata =validataset , 
+                        type = "response",se.fit=FALSE)
 
 traindataset=saveRDS(traindataset,"traindataset.rds")
 traindataset=readRDS("traindataset.rds")
 
 traindataset=traindataset%>%
   mutate(predresult=ifelse(pred>0.5,1,0))
-
 accuracy=sum(traindataset$predresult==traindataset$label)/nrow(traindataset)
 accuracy 
-sum(traindataset$label)/nrow(traindataset)
+
+validataset=validataset%>%
+  mutate(predresult=ifelse(pred>0.9,1,0))
+accuracyvali=sum(validataset$predresult==validataset$label)/nrow(validataset)
+accuracyvali 
+
 
 #model 2
-model2=glm(label~purpose+application_type+loan_amnt_itv+nev_delinq_itv+verification_status+chargedoffrecord+pastdelinq+nowdelinq+total_acc_log+sub_grade+term+addr_state+emp_length+home_status*emp_length,data=traindataset,family=binomial(link="logit"))
+model2=glm(label~purpose+application_type+loan_amnt_itv+annual_inc_itv+nev_delinq_itv+verification_status+chargedoffrecord+pastdelinq+nowdelinq+total_acc_log+sub_grade+term_num+addr_state+emp_length+home_status*emp_length,data=traindataset,family=binomial(link="logit"))
+
 
 traindataset$predmodel2=predict(model2, 
                         newdata =traindataset , 
